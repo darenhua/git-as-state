@@ -1,0 +1,10 @@
+[
+  {
+    "id": "19f33da9-f72f-48fa-a6da-9a036a75af27",
+    "branch": "prototype/second-forwards",
+    "modulePath": "src/app/modules/second-forwards",
+    "prompt": "We are working on `@src/app/modules/second-forwards`.\n\nPlease first study `@src/app/modules/second-forwards/SPEC.md`, then implement the requirement specified there into the working directory.\n",
+    "status": "pending",
+    "submittedAt": "2026-02-16T08:17:03.023Z"
+  }
+]
