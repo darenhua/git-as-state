@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import type {
   ApiResponse,
+  MainCommit,
   PrototypeBranch,
   PrototypeCommit,
   PrototypeStage,
@@ -75,6 +76,17 @@ async function apiSync(branch: string) {
   return apiFetch<{ output: string }>("/sync", {
     method: "POST",
     body: JSON.stringify({ branch }),
+  });
+}
+
+async function apiGetMainCommits(limit = 30) {
+  return apiFetch<MainCommit[]>(`/main-commits?limit=${limit}`);
+}
+
+async function apiRebase(branch: string, ontoCommit: string) {
+  return apiFetch<{ message: string }>("/rebase", {
+    method: "POST",
+    body: JSON.stringify({ branch, ontoCommit }),
   });
 }
 
@@ -309,6 +321,10 @@ function BranchCard({
     `Prototype: ${branch.displayName}`
   );
   const [showPRForm, setShowPRForm] = useState(false);
+  const [showRebase, setShowRebase] = useState(false);
+  const [mainCommits, setMainCommits] = useState<MainCommit[]>([]);
+  const [loadingMainCommits, setLoadingMainCommits] = useState(false);
+  const [selectedRebaseCommit, setSelectedRebaseCommit] = useState<string>("");
 
   function flash(msg: string, type: "ok" | "err") {
     setToast({ msg, type });
@@ -370,6 +386,36 @@ function BranchCard({
       onRefresh();
     } else {
       flash(res.error || "Sync failed", "err");
+    }
+  }
+
+  async function handleOpenRebase() {
+    setShowRebase(true);
+    setLoadingMainCommits(true);
+    const res = await apiGetMainCommits();
+    setLoadingMainCommits(false);
+    if (res.ok && res.data) {
+      setMainCommits(res.data);
+      if (res.data.length > 0) {
+        setSelectedRebaseCommit(res.data[0].hash);
+      }
+    } else {
+      flash(res.error || "Failed to load main commits", "err");
+      setShowRebase(false);
+    }
+  }
+
+  async function handleRebase() {
+    if (!selectedRebaseCommit) return;
+    setActionLoading("rebase");
+    const res = await apiRebase(branch.name, selectedRebaseCommit);
+    setActionLoading(null);
+    if (res.ok) {
+      flash(res.data?.message || "Rebased successfully", "ok");
+      setShowRebase(false);
+      onRefresh();
+    } else {
+      flash(res.error || "Rebase failed", "err");
     }
   }
 
@@ -519,6 +565,80 @@ function BranchCard({
         >
           {actionLoading === "sync" ? "Syncing..." : "Sync"}
         </button>
+
+        {!showRebase ? (
+          <button
+            onClick={handleOpenRebase}
+            disabled={!!actionLoading}
+            className="rounded border border-orange-700/50 px-3 py-1.5 text-xs text-orange-400 hover:bg-orange-500/10 hover:text-orange-300 disabled:opacity-50 transition-colors"
+          >
+            Rebase
+          </button>
+        ) : (
+          <div className="basis-full mt-2 rounded border border-orange-700/30 bg-orange-500/5 p-3 space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium text-orange-400">
+                Rebase onto commit on main
+              </span>
+              <button
+                onClick={() => setShowRebase(false)}
+                className="text-[10px] text-zinc-500 hover:text-zinc-300"
+              >
+                Cancel
+              </button>
+            </div>
+            {loadingMainCommits ? (
+              <p className="text-xs text-zinc-500">Loading main commits...</p>
+            ) : (
+              <>
+                <select
+                  value={selectedRebaseCommit}
+                  onChange={(e) => setSelectedRebaseCommit(e.target.value)}
+                  className="w-full rounded border border-zinc-700 bg-zinc-900 px-2 py-1.5 text-xs text-zinc-200 font-mono focus:outline-none focus:border-orange-500"
+                >
+                  {mainCommits.map((c) => (
+                    <option key={c.hash} value={c.hash}>
+                      {c.shortHash} — {c.message.slice(0, 60)}
+                      {c.message.length > 60 ? "..." : ""}
+                    </option>
+                  ))}
+                </select>
+                {selectedRebaseCommit && (
+                  <p className="text-[10px] text-zinc-500 font-mono">
+                    {mainCommits.find((c) => c.hash === selectedRebaseCommit)
+                      ?.date
+                      ? `${formatDate(
+                          mainCommits.find(
+                            (c) => c.hash === selectedRebaseCommit
+                          )!.date
+                        )} by ${
+                          mainCommits.find(
+                            (c) => c.hash === selectedRebaseCommit
+                          )!.author
+                        }`
+                      : ""}
+                  </p>
+                )}
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleRebase}
+                    disabled={
+                      !!actionLoading || !selectedRebaseCommit
+                    }
+                    className="rounded bg-orange-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-orange-500 disabled:opacity-50 transition-colors"
+                  >
+                    {actionLoading === "rebase"
+                      ? "Rebasing..."
+                      : "Rebase Branch"}
+                  </button>
+                  <span className="text-[10px] text-zinc-600">
+                    Aborts on conflict — branch stays unchanged
+                  </span>
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Toast */}

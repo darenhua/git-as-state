@@ -521,3 +521,77 @@ export function syncBranch(branchName: string): string {
     if (didStash) unstash();
   }
 }
+
+// --- Main branch log (for rebase target selection) ---
+
+import type { MainCommit } from '../types';
+
+export function getMainCommits(limit: number = 30): MainCommit[] {
+  const log = exec(
+    `git log ${BASE_BRANCH} --format="%H|%h|%s|%ai|%an" -n ${limit}`,
+    { allowFailure: true },
+  );
+  if (!log) return [];
+
+  return log
+    .split('\n')
+    .filter((l) => l.trim())
+    .map((line) => {
+      const parts = line.split('|');
+      return {
+        hash: parts[0],
+        shortHash: parts[1],
+        message: parts[2],
+        date: parts[3],
+        author: parts.slice(4).join('|'),
+      };
+    });
+}
+
+// --- Rebase ---
+
+export function rebaseBranch(branchName: string, ontoCommit: string): void {
+  // Validate that ontoCommit is actually on main
+  const isOnMain = exec(
+    `git merge-base --is-ancestor ${ontoCommit} ${BASE_BRANCH}`,
+    { allowFailure: true },
+  );
+  // git merge-base --is-ancestor exits 0 (empty string on success) if true,
+  // exits 1 (which our exec catches) if false. Since we use allowFailure,
+  // a non-empty error string means it's not an ancestor. But actually
+  // the command returns empty on success and throws on failure.
+  // Let's verify the commit exists on main differently:
+  const mainContains = exec(
+    `git branch --contains ${ontoCommit} --list ${BASE_BRANCH}`,
+    { allowFailure: true },
+  );
+  if (!mainContains.includes(BASE_BRANCH)) {
+    throw new Error(
+      `Commit ${ontoCommit} is not on ${BASE_BRANCH}. Select a commit from the main branch.`,
+    );
+  }
+
+  const previousBranch = getCurrentBranch();
+  const didStash = stash();
+
+  try {
+    exec(`git checkout ${branchName}`);
+
+    // Attempt the rebase — if conflicts occur, abort and throw
+    try {
+      exec(`git rebase ${ontoCommit}`);
+    } catch (rebaseError) {
+      // Abort the in-progress rebase
+      exec('git rebase --abort', { allowFailure: true });
+      throw new Error(
+        `Rebase of '${branchName}' onto ${ontoCommit.slice(0, 7)} failed due to conflicts. ` +
+          `Rebase has been aborted — branch is unchanged.`,
+      );
+    }
+  } finally {
+    if (previousBranch !== branchName) {
+      exec(`git checkout ${previousBranch}`, { allowFailure: true });
+    }
+    if (didStash) unstash();
+  }
+}

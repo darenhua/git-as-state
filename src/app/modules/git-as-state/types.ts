@@ -135,6 +135,20 @@ export interface SyncRequest {
   branch: string;
 }
 
+export interface RebaseRequest {
+  branch: string;
+  ontoCommit: string; // commit hash on main to rebase onto
+}
+
+// A commit on the main branch (for rebase target selection)
+export interface MainCommit {
+  hash: string;
+  shortHash: string;
+  message: string;
+  date: string;
+  author: string;
+}
+
 export interface ApiResponse<T = unknown> {
   ok: boolean;
   data?: T;
