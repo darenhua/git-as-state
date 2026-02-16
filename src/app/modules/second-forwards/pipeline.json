@@ -1,0 +1,9 @@
+{
+  "mode": "forwards-only",
+  "sourceModule": {
+    "name": "first-ever-forwards",
+    "path": "src/app/modules/first-ever-forwards",
+    "hasSpec": true
+  },
+  "createdAt": "2026-02-16T08:16:52.257Z"
+}
